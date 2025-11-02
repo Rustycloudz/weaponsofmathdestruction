@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weapons of Math Destruction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Default background for when the game is actively playing */
+            background-image: url('https://raw.githubusercontent.com/Rustycloudz/weaponsofmathdestruction/main/weapons_of_math_destruction.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: scroll; /* Changed to scroll for stability */
+            background-color: rgba(247, 243, 241, 1); /* Fallback color */
+        }
+        
+        /* Custom Styles for the Title Screen */
+        #home-screen-overlay {
+            /* Use the game title image as the full background */
+            background-image: url('https://raw.githubusercontent.com/Rustycloudz/weaponsofmathdestruction/main/title.jpg');
+            /* === MODIFIED LINE: Ensures the entire image is visible, scaling it down if necessary === */
+            background-size: contain;
+            background-position: center top; 
+            background-repeat: no-repeat;
+            /* Added background color to fill the gaps created by 'contain' */
+            background-color: #1f2937; 
+        }
+
+        /* Animation for the Click to Start button */
+        @keyframes pulse-opacity {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+        }
+
+        #click-to-start {
+            animation: pulse-opacity 2s infinite ease-in-out;
+        }
+
+        /* Style for the Mission Briefing Panel */
+        #mission-briefing-panel {
+            background-color: rgba(30, 41, 59, 0.95);
+            /* Initial state: hidden */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            pointer-events: none;
+        }
+
+        #mission-briefing-panel.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .mode-button {
+            transition: all 0.15s ease-in-out;
+            transform: scale(1);
+        }
+        .mode-button:hover {
+            transform: scale(1.03);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .mode-button.active {
+            box-shadow: 0 0 0 4px rgba(90, 150, 246, 0.86), 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
+        }
+        .mode-button.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: scale(1);
+            pointer-events: none; 
+            box-shadow: none; 
+        }
+        .mode-button.disabled:hover {
+            transform: scale(1); 
+        }
+
+        .question-box {
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .input-number {
+            appearance: none;
+            -moz-appearance: textfield;
+            text-align: center;
+            font-weight: 700;
+        }
+        .input-number::-webkit-outer-spin-button,
+        .input-number::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- 1. Home Screen Overlay (Title Image + Click to Start) -->
+    <div id="home-screen-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center p-4">
+        
+        <!-- Click to Start Button (Visible on initial load) -->
+        <button id="click-to-start" class="bg-yellow-400 text-gray-900 p-4 px-10 rounded-full font-black text-2xl uppercase tracking-wider hover:bg-yellow-500 transition shadow-2xl transform hover:scale-110">
+            Click to Start Mission
+        </button>
+
+        <!-- 2. Mission Briefing Panel (Initially Hidden) -->
+        <div id="mission-briefing-panel" class="absolute inset-0 flex flex-col items-center justify-center p-4">
+            <div class="w-full max-w-lg mx-auto p-6 md:p-8 rounded-xl text-center shadow-2xl bg-gray-900 border-4 border-yellow-400">
+                
+                <h2 class="text-4xl font-black text-yellow-400 mb-6 tracking-tighter">MISSION BRIEFING</h2>
+
+                <!-- Story Explanation -->
+                <p class="text-lg text-gray-300 mb-8 font-medium">
+                    The notorious **Dr. Hugh Manitees**, a villain with a serious grudge against arithmetic, has deployed his four **"Weapons of Math Destruction"** to steal every number on Earth! Your mission is to disarm all four weapons by solving their security protocols before they detonate and ruin all counting and time-telling forever!
+                </p>
+
+                <p class="text-xl text-yellow-400 mb-6 font-bold uppercase tracking-wider">
+                    Select Mission Protocol:
+                </p>
+
+                <!-- Mode Selection Buttons -->
+                <button data-speedrun="false" id="standard-mode-button" class="mode-select-button w-full mb-4 bg-indigo-600 text-white p-4 rounded-xl font-black text-xl hover:bg-indigo-700 transition shadow-lg transform hover:scale-105">
+                    Standard Protocol (20 Questions / Weapon)
+                </button>
+                <button data-speedrun="true" id="speedrun-mode-button" class="mode-select-button w-full mb-6 bg-red-600 text-white p-4 rounded-xl font-black text-xl hover:bg-red-700 transition shadow-lg transform hover:scale-105">
+                    Speedrun Protocol (10 Questions / Weapon, 30s Timer)
+                </button>
+                
+                <!-- Mute Button -->
+                <button id="mute-button" class="w-full text-gray-400 p-2 rounded-xl text-sm hover:text-white transition">
+                    <span id="mute-icon" class="text-xl mr-2">🔊</span> Mute Sounds
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Main Application Container (Initially hidden) -->
+    <div id="app" class="bg-blue-200 shadow-2xl rounded-xl w-full max-w-lg mx-auto p-6 md:p-8 transition-opacity duration-500 hidden" style="border-bottom: 8px solid rgba(101, 81, 255, 0.12);">
+        <h1 class="text-3xl md:text-4xl font-black text-center text-gray-800 mb-6 tracking-tight">
+            Weapon Disarm Interface
+        </h1>
+
+        <!-- Timer Display (Hidden by default, shown in Speedrun) -->
+        <div id="timer-display" class="hidden bg-red-600 text-white text-center p-2 rounded-lg mb-4 shadow-lg">
+            <p class="text-lg font-black tracking-wider">TIME REMAINING: <span id="time-left-span" class="text-2xl ml-2">30</span>s</p>
+        </div>
+
+        <!-- Mode Selection -->
+        <div id="mode-selection" class="grid grid-cols-2 gap-3 mb-6">
+            <button data-mode="addition" class="mode-button active bg-purple-500 text-green-500 p-3 rounded-xl font-bold text-lg hover:bg-green-600 shadow-md">
+                Addition (+)
+            </button>
+            <button data-mode="subtraction" class="mode-button bg-purple-500 text-red-400 p-3 rounded-xl font-bold text-lg hover:bg-red-600 shadow-md disabled" disabled>
+                Subtraction (-)
+            </button>
+            <button data-mode="missing" class="mode-button bg-purple-500 text-white p-3 rounded-xl font-bold text-lg hover:bg-blue-500 shadow-md disabled" disabled>
+                Missing ☐
+            </button>
+            <button data-mode="comparison" class="mode-button bg-purple-500 text-yellow-500 p-3 rounded-xl font-bold text-lg hover:bg-yellow-300 shadow-md disabled" disabled>
+                Compare (>, <)
+            </button>
+        </div>
+
+        <!-- Mission Status/Progress (Gamification Element) -->
+        <div class="bg-indigo-700 text-white p-3 rounded-xl mb-6 shadow-xl">
+            <div class="flex justify-between items-center mb-2">
+                <p class="text-sm uppercase font-semibold tracking-wider">WEAPON DISARM PROTOCOL:</p>
+                <p id="progress-goal" class="text-lg font-black" style="color: rgba(253, 230, 138, 1);">20 Steps</p>
+            </div>
+            <div class="w-full bg-indigo-500 rounded-full h-4">
+                <div id="progress-bar" class="h-4 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+            </div>
+            <p id="progress-text" class="text-center mt-2 text-sm font-medium">Disarm the Weapon of Addition</p>
+        </div>
+
+        <!-- Problem and Answer Panel -->
+        <div class="p-4 md:p-6 rounded-lg mb-6 shadow-inner" style="background-color: rgba(254, 249, 195, 1);">
+
+            <!-- Problem Area (Question) -->
+            <div class="question-box h-36 md:h-48 text-5xl md:text-7xl font-extrabold text-gray-900" id="problem-display">
+                Tap a mode to start!
+            </div>
+
+            <!-- Input and Check Area -->
+            <div id="answer-area" class="flex flex-col items-start space-y-4 pt-4 mt-4 border-t border-yellow-300">
+                <div id="comparison-buttons" class="hidden grid grid-cols-3 gap-3 w-full max-w-sm">
+                    <button data-op=">" class="comp-button bg-yellow-400 text-gray-800 p-3 rounded-xl font-black text-3xl hover:bg-yellow-500 transition shadow-md">
+                        &gt;
+                    </button>
+                    <button data-op="<" class="comp-button bg-yellow-400 text-gray-800 p-3 rounded-xl font-black text-3xl hover:bg-yellow-500 transition shadow-md">
+                        &lt;
+                    </button>
+                    <button data-op="=" class="comp-button bg-yellow-400 text-gray-800 p-3 rounded-xl font-black text-3xl hover:bg-yellow-500 transition shadow-md">
+                        =
+                    </button>
+                </div>
+
+                <div id="number-input-area" class="flex w-full max-w-sm space-x-3">
+                    <input type="number" id="user-answer" placeholder="Your Answer" class="input-number flex-grow p-3 text-xl border-2 border-gray-300 rounded-xl focus:border-yellow-500 focus:ring-yellow-500 transition duration-150" autofocus>
+                    <button id="check-button" class="bg-indigo-600 text-white p-3 rounded-xl font-bold text-xl hover:bg-indigo-700 transition shadow-lg">
+                        Check
+                    </button>
+                </div>
+
+                <!-- Feedback Message -->
+                <p id="feedback-message" class="text-xl font-bold h-8"></p>
+            </div>
+        </div>
+
+        <!-- Score Board -->
+        <div class="mt-8 pt-4 border-t-2 border-gray-200 flex justify-between text-center">
+            <div>
+                <p class="text-sm uppercase text-gray-500 font-bold">Total Disarms</p>
+                <p id="total-disarms-display" class="text-3xl font-black" style="color: rgba(4, 120, 87, 1);">0</p>
+            </div>
+            <div>
+                <p class="text-sm uppercase text-gray-500 font-bold">Current Streak</p>
+                <p id="streak-display" class="text-3xl font-black" style="color: rgba(236, 72, 153, 1);">0</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Game Over Overlay (10 Fails) -->
+    <div id="game-over-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000" id="game-over-background" style="background-image: url('https://raw.githubusercontent.com/Rustycloudz/weaponsofmathdestruction/main/game_over.jpg');">
+        </div>
+        
+        <div class="relative z-10 p-8 rounded-xl bg-black bg-opacity-70 text-white text-center shadow-2xl backdrop-blur-sm">
+            <h2 class="text-6xl font-black mb-4 tracking-tighter" style="color: rgba(253, 224, 71, 1);">MISSION FAILED</h2>
+            <p class="text-xl mb-8 font-semibold">10 consecutive errors detected. The weapon detonated!</p>
+            <button data-restart-full="false" id="try-again-button" class="bg-indigo-600 text-white p-4 px-8 rounded-full font-bold text-xl hover:bg-indigo-700 transition shadow-lg transform hover:scale-105">
+                Try Again
+            </button>
+        </div>
+    </div>
+
+    <!-- You Win Overlay (Game Complete) -->
+    <div id="you-win-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000" style="background-image: url('https://raw.githubusercontent.com/Rustycloudz/weaponsofmathdestruction/main/you_win.jpg');">
+        </div>
+        
+        <div class="relative z-10 p-8 rounded-xl bg-black bg-opacity-70 text-white text-center shadow-2xl backdrop-blur-sm">
+            <h2 class="text-6xl font-black mb-4 tracking-tighter" style="color: rgba(74, 222, 128, 1);">MISSION ACCOMPLISHED</h2>
+            <p class="text-xl mb-8 font-semibold">All four Weapons of Math Destruction have been disarmed!</p>
+            <button data-restart-full="true" id="play-again-button" class="bg-yellow-400 text-gray-900 p-4 px-8 rounded-full font-bold text-xl hover:bg-yellow-500 transition shadow-lg transform hover:scale-105">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Global state for the application
+        let state = {
+            mode: 'addition', // addition, subtraction, missing, comparison
+            currentProblem: null,
+            totalDisarms: 0, 
+            streak: 0, // Correct streak
+            incorrectStreak: 0, // Streak for consecutive wrong answers
+            maxFails: 10, // Limit for incorrect streak
+            isReady: false,
+            targetGoal: 20, 
+            modeProgress: 0, // Correct answers in the current mode (0-19)
+            isSpeedrun: false, // Speedrun mode flag
+            timerId: null,      // ID for the setInterval timer
+            timeLeft: 30,       // Time remaining in seconds
+            isMuted: false,     // Mute state
+            unlockedModes: {
+                addition: true,
+                subtraction: false,
+                missing: false,
+                comparison: false
+            }
+        };
+        
+        const SPEEDRUN_TIME = 30; // Time limit for speedrun mode
+
+        // --- Element References ---
+        const problemDisplay = document.getElementById('problem-display');
+        const totalDisarmsDisplay = document.getElementById('total-disarms-display');
+        const streakDisplay = document.getElementById('streak-display');
+        const feedbackMessage = document.getElementById('feedback-message');
+        const userAnswerInput = document.getElementById('user-answer');
+        const comparisonButtons = document.getElementById('comparison-buttons');
+        const numberInputArea = document.getElementById('number-input-area');
+        const checkButton = document.getElementById('check-button');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const appContainer = document.getElementById('app');
+        const gameOverOverlay = document.getElementById('game-over-overlay');
+        const tryAgainButton = document.getElementById('try-again-button');
+        const youWinOverlay = document.getElementById('you-win-overlay'); 
+        const playAgainButton = document.getElementById('play-again-button'); 
+        const homeScreenOverlay = document.getElementById('home-screen-overlay'); 
+        const titleButton = document.getElementById('click-to-start');          
+        const briefingPanel = document.getElementById('mission-briefing-panel'); 
+        const timerDisplay = document.getElementById('timer-display'); 
+        const timeLeftSpan = document.getElementById('time-left-span'); 
+        const muteButton = document.getElementById('mute-button'); 
+        const muteIcon = document.getElementById('mute-icon');     
+
+
+        // --- Sound Logic (Tone.js) ---
+
+        const correctSynth = new Tone.MembraneSynth().toDestination();
+        const incorrectSynth = new Tone.NoiseSynth({
+            noise: { type: 'pink' },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 }
+        }).toDestination();
+        const timeoutSynth = new Tone.Synth({
+             oscillator: { type: "sine" },
+             envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 }
+        }).toDestination();
+
+
+        /**
+         * Plays a success sound.
+         */
+        function playSuccess() {
+            if (state.isMuted) return; 
+            try {
+                if (!state.isReady) Tone.start();
+                state.isReady = true;
+                correctSynth.triggerAttackRelease("C4", "8n");
+                correctSynth.triggerAttackRelease("G4", "8n", "+0.1");
+            } catch (e) { console.error("Sound error:", e); }
+        }
+
+        /**
+         * Plays a failure sound.
+         */
+        function playFailure() {
+            if (state.isMuted) return; 
+            try {
+                if (!state.isReady) Tone.start();
+                state.isReady = true;
+                incorrectSynth.triggerAttackRelease("16n");
+            } catch (e) { console.error("Sound error:", e); }
+        }
+        
+        /**
+         * Plays a timeout sound.
+         */
+        function playTimeout() {
+            if (state.isMuted) return; 
+            try {
+                if (!state.isReady) Tone.start();
+                state.isReady = true;
+                timeoutSynth.triggerAttackRelease("F3", "4n");
+            } catch (e) { console.error("Sound error:", e); }
+        }
+        
+        /**
+         * Toggles the mute state and updates the button text/icon.
+         */
+        function toggleMute() {
+            state.isMuted = !state.isMuted;
+            if (state.isMuted) {
+                muteIcon.textContent = '🔇';
+                muteButton.lastChild.textContent = ' Unmute Sounds';
+            } else {
+                muteIcon.textContent = '🔊';
+                muteButton.lastChild.textContent = ' Mute Sounds';
+            }
+        }
+
+
+        // --- Timer Logic ---
+
+        /**
+         * Clears any existing timer.
+         */
+        function stopTimer() {
+            if (state.timerId) {
+                clearInterval(state.timerId);
+                state.timerId = null;
+            }
+            state.timeLeft = SPEEDRUN_TIME;
+            if (timeLeftSpan) timeLeftSpan.textContent = SPEEDRUN_TIME;
+        }
+
+        /**
+         * Starts the countdown timer for Speedrun Mode.
+         */
+        function startTimer() {
+            if (!state.isSpeedrun) return;
+            
+            stopTimer(); // Ensure previous timer is cleared
+
+            state.timeLeft = SPEEDRUN_TIME;
+            timerDisplay.classList.remove('bg-red-600');
+            timerDisplay.classList.add('bg-indigo-600');
+
+            state.timerId = setInterval(() => {
+                state.timeLeft -= 1;
+                timeLeftSpan.textContent = state.timeLeft;
+
+                if (state.timeLeft <= 5) {
+                    timerDisplay.classList.add('bg-red-600');
+                    timerDisplay.classList.remove('bg-indigo-600');
+                }
+
+                if (state.timeLeft <= 0) {
+                    stopTimer();
+                    playTimeout();
+                    incorrectAnswerFeedback('Time ran out!');
+                }
+            }, 1000);
+        }
+
+        // --- Problem Generation Logic ---
+
+        /**
+         * Generates a random integer between min and max, inclusive.
+         * @param {number} min
+         * @param {number} max
+         * @returns {number}
+         */
+        const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        /**
+         * Determines the maximum number limits based on the current progress (0-19 or 0-9).
+         * @param {number} progress The current number of correct answers.
+         * @returns {{maxAdd: number, maxSub: number, maxComp: number}}
+         */
+        function getDifficultyMax(progress) {
+            const limit = state.targetGoal; // 10 or 20
+            const step = limit / 4; // 2.5 or 5
+            
+            // Map progress (0-9 or 0-19) into 4 difficulty tiers
+            if (progress < step * 1) return { maxAdd: 10, maxSub: 10, maxComp: 20 };
+            if (progress < step * 2) return { maxAdd: 15, maxSub: 15, maxComp: 50 };
+            if (progress < step * 3) return { maxAdd: 20, maxSub: 20, maxComp: 100 };
+            return { maxAdd: 50, maxSub: 50, maxComp: 200 };
+        }
+
+        /**
+         * Generates a math problem based on the current mode and difficulty level.
+         * @returns {{question: string, answer: any}}
+         */
+        function generateProblem() {
+            let num1, num2, answer, question;
+            const progress = state.modeProgress;
+            const { maxAdd, maxSub, maxComp } = getDifficultyMax(progress);
+
+            switch (state.mode) {
+                case 'addition':
+                    num1 = randInt(1, maxAdd - 1);
+                    num2 = randInt(1, maxAdd - num1);
+                    answer = num1 + num2;
+                    question = `${num1} + ${num2} = ?`;
+                    return { question, answer };
+
+                case 'subtraction':
+                    num1 = randInt(10, maxSub);
+                    num2 = randInt(1, num1 - 1);
+                    answer = num1 - num2;
+                    question = `${num1} - ${num2} = ?`;
+                    return { question, answer };
+
+                case 'missing':
+                    const C = randInt(5, maxAdd);
+                    const A = randInt(1, C - 1);
+                    answer = C - A;
+                    question = `${A} + <span style="color: rgba(220, 38, 38, 1);">☐</span> = ${C}`;
+                    return { question, answer };
+
+                case 'comparison':
+                    num1 = randInt(1, maxComp);
+                    num2 = randInt(1, maxComp);
+                    if (num1 > num2) answer = '>';
+                    else if (num1 < num2) answer = '<';
+                    else answer = '=';
+                    question = `${num1} <span style="color: rgba(37, 99, 235, 1);">☐</span> ${num2}`;
+                    return { question, answer };
+
+                default:
+                    return { question: 'Error: Invalid Mode', answer: null };
+            }
+        }
+
+        // --- UI Update and Control ---
+
+        /**
+         * Renders the mode buttons, disabling those not yet unlocked.
+         */
+        function renderModeButtons() {
+            document.querySelectorAll('.mode-button').forEach(button => {
+                const mode = button.dataset.mode;
+                if (state.unlockedModes[mode]) {
+                    button.classList.remove('disabled');
+                    button.removeAttribute('disabled');
+                } else {
+                    button.classList.add('disabled');
+                    button.setAttribute('disabled', 'true');
+                }
+                
+                if (mode === state.mode) {
+                    document.querySelector('.mode-button.active')?.classList.remove('active');
+                    button.classList.add('active');
+                }
+            });
+            
+            document.getElementById('progress-goal').textContent = `${state.targetGoal} Steps`;
+        }
+
+        /**
+         * Updates the mission progress bar and text based on the current mode's progress.
+         */
+        function updateProgressUI() {
+            const progress = state.modeProgress;
+            const goal = state.targetGoal;
+            const percentage = Math.min((progress / goal) * 100, 100);
+
+            progressBar.style.width = `${percentage}%`;
+            
+            let modeName = state.mode.charAt(0).toUpperCase() + state.mode.slice(1);
+            if (state.mode === 'missing') modeName = 'Missing Box';
+            if (state.mode === 'comparison') modeName = 'Comparison';
+            
+            const currentLevel = Math.min(progress + 1, goal);
+
+            const protocol = state.isSpeedrun ? 'SPEEDRUN' : 'STANDARD';
+            progressText.textContent = `[${protocol}] Level ${currentLevel} / ${goal} steps to disarm the ${modeName} Weapon of Math Destruction.`;
+            
+            let color;
+            if (percentage >= 80) color = 'rgba(74, 222, 128, 1)'; 
+            else if (percentage >= 50) color = 'rgba(250, 204, 21, 1)'; 
+            else color = 'rgba(248, 113, 113, 1)'; 
+            
+            progressBar.style.backgroundColor = color;
+            progressBar.className = 'h-4 rounded-full transition-all duration-500 ease-out';
+
+            totalDisarmsDisplay.textContent = state.totalDisarms;
+            streakDisplay.textContent = state.streak;
+            
+            if (state.isSpeedrun) {
+                timerDisplay.classList.remove('hidden');
+                timeLeftSpan.textContent = state.timeLeft;
+            } else {
+                timerDisplay.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Updates the UI elements based on the current state and starts the timer if needed.
+         */
+        function updateUI() {
+            updateProgressUI(); 
+
+            state.currentProblem = generateProblem();
+            problemDisplay.innerHTML = state.currentProblem.question;
+
+            userAnswerInput.value = '';
+            feedbackMessage.textContent = '';
+            feedbackMessage.style.color = ''; 
+            userAnswerInput.focus();
+
+            if (state.mode === 'comparison') {
+                numberInputArea.classList.add('hidden');
+                comparisonButtons.classList.remove('hidden');
+            } else {
+                numberInputArea.classList.remove('hidden');
+                comparisonButtons.classList.add('hidden');
+            }
+            
+            startTimer();
+        }
+
+        /**
+         * Hides the initial click button and shows the briefing panel.
+         */
+        function showBriefing() {
+            titleButton.classList.add('hidden');
+            briefingPanel.classList.add('active');
+        }
+
+        /**
+         * Hides the home screen and starts the game in the chosen mode.
+         * @param {boolean} isSpeedrunMode True for speedrun, false for standard.
+         */
+        function startGame(isSpeedrunMode) {
+            state.isSpeedrun = isSpeedrunMode;
+            state.targetGoal = isSpeedrunMode ? 10 : 20;
+            state.mode = 'addition';
+            state.modeProgress = 0;
+            state.incorrectStreak = 0;
+            state.streak = 0;
+            
+            homeScreenOverlay.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            appContainer.classList.remove('opacity-10', 'pointer-events-none');
+            
+            renderModeButtons();
+            updateUI();
+        }
+        
+        /**
+         * Shows the Game Over screen and stops the game flow.
+         */
+        function showGameOverScreen() {
+            stopTimer();
+            appContainer.classList.add('opacity-10', 'pointer-events-none');
+            gameOverOverlay.classList.remove('hidden');
+            playFailure();
+        }
+        
+        /**
+         * Shows the You Win screen and stops the game flow.
+         */
+        function showYouWinScreen() {
+            stopTimer();
+            appContainer.classList.add('opacity-10', 'pointer-events-none');
+            youWinOverlay.classList.remove('hidden');
+
+            playSuccess(); 
+            correctSynth.triggerAttackRelease("C5", "8n", "+0.2");
+            correctSynth.triggerAttackRelease("E5", "8n", "+0.4");
+        }
+
+        /**
+         * Resets the game state and hides the Game Over screen.
+         * Used for retrying the current mission after a failure.
+         */
+        function resetGame() {
+            state.incorrectStreak = 0;
+            state.streak = 0; 
+            state.modeProgress = 0; 
+            stopTimer(); 
+
+            gameOverOverlay.classList.add('hidden');
+            appContainer.classList.remove('opacity-10', 'pointer-events-none');
+            
+            updateUI(); 
+        }
+        
+        /**
+         * Resets the entire game state to the initial condition (Home Screen).
+         */
+        function resetAllProgress() {
+            // Stop timers and hide overlays
+            stopTimer();
+            gameOverOverlay.classList.add('hidden');
+            youWinOverlay.classList.add('hidden');
+            appContainer.classList.add('hidden');
+            
+            // Show Home Screen for new mode selection
+            homeScreenOverlay.classList.remove('hidden');
+            briefingPanel.classList.remove('active'); // Hide briefing
+            titleButton.classList.remove('hidden');   // Show 'Click to Start' button
+            
+            // Reset state to initial conditions (ready for new selection)
+            state.totalDisarms = 0;
+            state.streak = 0;
+            state.incorrectStreak = 0;
+            state.modeProgress = 0;
+            state.mode = 'addition';
+            state.isSpeedrun = false; 
+            state.targetGoal = 20; 
+            state.unlockedModes = {
+                addition: true,
+                subtraction: false,
+                missing: false,
+                comparison: false
+            };
+            renderModeButtons();
+        }
+
+        /**
+         * Handles the answer checking logic for number input modes.
+         */
+        function handleCheckNumberAnswer() {
+            if (state.timerId === null && state.isSpeedrun) return; 
+
+            const problem = state.currentProblem;
+            const input = userAnswerInput.value.trim();
+            if (!input) {
+                feedbackMessage.textContent = 'Please enter an answer!';
+                return;
+            }
+
+            const userAnswer = parseInt(input, 10);
+            if (userAnswer === problem.answer) {
+                correctAnswerFeedback();
+            } else {
+                incorrectAnswerFeedback(`Oops! The answer was ${problem.answer}.`);
+            }
+        }
+
+        /**
+         * Handles the answer checking logic for comparison mode.
+         * @param {string} userOp The operator selected by the user ('>', '<', '=')
+         */
+        function handleCheckComparisonAnswer(userOp) {
+            if (state.timerId === null && state.isSpeedrun) return; 
+            
+            const problem = state.currentProblem;
+            if (userOp === problem.answer) {
+                correctAnswerFeedback();
+            } else {
+                const questionWithAnswer = problem.question.replace('<span style="color: rgba(37, 99, 235, 1);">☐</span>', problem.answer);
+                incorrectAnswerFeedback(`Not quite! It should be: ${questionWithAnswer}`);
+            }
+        }
+
+        /**
+         * Provides positive feedback and prepares for the next question.
+         */
+        function correctAnswerFeedback() {
+            stopTimer(); 
+            playSuccess();
+            state.totalDisarms += 1;
+            state.streak += 1;
+            state.modeProgress += 1;
+            state.incorrectStreak = 0; 
+
+            updateProgressUI(); 
+
+            if (state.modeProgress >= state.targetGoal) {
+                
+                if (state.mode === 'comparison') {
+                    showYouWinScreen();
+                    return; 
+                }
+
+                let unlockedNext = false;
+                let nextModeName = '';
+                
+                if (state.mode === 'addition' && !state.unlockedModes.subtraction) {
+                    state.unlockedModes.subtraction = true;
+                    nextModeName = 'Subtraction';
+                    unlockedNext = true;
+                } else if (state.mode === 'subtraction' && !state.unlockedModes.missing) {
+                    state.unlockedModes.missing = true;
+                    nextModeName = 'Missing Box';
+                    unlockedNext = true;
+                } else if (state.mode === 'missing' && !state.unlockedModes.comparison) {
+                    state.unlockedModes.comparison = true;
+                    nextModeName = 'Comparison';
+                    unlockedNext = true;
+                }
+                
+                renderModeButtons();
+
+                feedbackMessage.className = 'text-xl font-bold h-8 animate-pulse';
+                feedbackMessage.style.color = 'rgba(253, 224, 71, 1)'; 
+                
+                if (unlockedNext) {
+                    feedbackMessage.textContent = `WEAPON NEUTRALIZED! 🛡️ ${nextModeName} UNLOCKED!`;
+                } else {
+                    feedbackMessage.textContent = 'WEAPON NEUTRALIZED! 🛡️ MISSION COMPLETE!';
+                }
+                
+                state.modeProgress = 0;
+                setTimeout(updateUI, 3000);
+            } else {
+                const nextLevel = state.modeProgress + 1;
+                feedbackMessage.className = 'text-xl font-bold h-8 animate-pulse';
+                feedbackMessage.style.color = 'rgba(22, 163, 74, 1)';
+                feedbackMessage.textContent = `Correct! Unlocking Level ${nextLevel}...`;
+                setTimeout(updateUI, 1200);
+            }
+        }
+
+        /**
+         * Provides negative feedback and handles Game Over condition.
+         * @param {string} message The message to display.
+         */
+        function incorrectAnswerFeedback(message) {
+            stopTimer(); 
+            state.streak = 0;
+            state.incorrectStreak += 1; 
+            updateProgressUI(); 
+
+            if (state.incorrectStreak >= state.maxFails) {
+                showGameOverScreen();
+                return; 
+            }
+            
+            playFailure();
+            feedbackMessage.className = 'text-xl font-bold h-8'; 
+            feedbackMessage.style.color = 'rgba(220, 38, 38, 1)';
+            feedbackMessage.textContent = message;
+            setTimeout(updateUI, 3000);
+        }
+
+        /**
+         * Initializes event listeners and sets up the app.
+         */
+        function initializeApp() {
+            
+            // --- Title Screen Listener ---
+            titleButton.addEventListener('click', showBriefing);
+
+            // --- Mode Selection Listeners (Now inside the Briefing Panel) ---
+            document.querySelectorAll('.mode-select-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const isSpeedrunMode = button.dataset.speedrun === 'true';
+                    startGame(isSpeedrunMode);
+                });
+            });
+            
+            // --- Mute Button Listener ---
+            muteButton.addEventListener('click', toggleMute);
+
+            // --- Mode Selection Listeners (on main app) ---
+            document.querySelectorAll('.mode-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const nextMode = button.dataset.mode;
+                    
+                    if (!state.unlockedModes[nextMode]) {
+                        return;
+                    }
+                    
+                    document.querySelector('.mode-button.active')?.classList.remove('active');
+                    button.classList.add('active');
+
+                    state.mode = nextMode;
+                    state.modeProgress = 0;
+                    state.incorrectStreak = 0; 
+                    updateUI();
+                });
+            });
+
+            // --- Number Input Listener ---
+            checkButton.addEventListener('click', handleCheckNumberAnswer);
+            userAnswerInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && state.mode !== 'comparison') {
+                    handleCheckNumberAnswer();
+                }
+            });
+
+            // --- Comparison Button Listeners ---
+            document.querySelectorAll('.comp-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    handleCheckComparisonAnswer(button.dataset.op);
+                });
+            });
+            
+            // --- Game Over Listener ---
+            tryAgainButton.addEventListener('click', resetGame);
+            
+            // --- You Win Listener ---
+            playAgainButton.addEventListener('click', resetAllProgress);
+
+
+            // Initial Setup: Only show 'Click to Start'
+            appContainer.classList.add('hidden');
+            briefingPanel.classList.remove('active');
+            titleButton.classList.remove('hidden');
+            homeScreenOverlay.classList.remove('hidden');
+            
+            renderModeButtons(); 
+        }
+
+        // Initialize the application when the window loads
+        window.onload = initializeApp;
+
+    </script>
+</body>
+</html>
